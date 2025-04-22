@@ -1,20 +1,39 @@
 from socket import socket,AF_INET6,AF_INET,SOCK_STREAM
+from http import HTTPMethod
 from typing import Callable
 
-class Request:
-    def __init__(self,content:str):
-        """The base class of new request for web-server."""
+class ShepardHTTPExceptions:
+    class CoreError(BaseException):...
+    class RequestError(BaseException):...
 
+class Request:
+    def __init__(self,content):
+        """The base class of new request for web-server."""
+        try:self.__parse__(content)
+        except Exception as e:raise ShepardHTTPExceptions.RequestError(f'Failed to parse request: {e}')
+        finally:
+            if e:raise e
+    def __parse__(self,content:str):
+        self.headers,self.data=content.split('\r\n\r\n',2)
+        self.headers=self.headers.split('\r\n')
+        self.info=self.headers.pop(0)
 
 class ShepardHTTPEvents:
-    request:Callable=None
+    request=None
+    get_request=None
+    post_request=None
+    head_request=None
+    delete_request=None
+    options_request=None
+    patch_request=None
+    put_request=None
 
 class ShepardHTTP:
-    def __init__(self,port:int,host:str,ipv6:bool,timeout:float,recv_buffer:int,backlog:int,*,sock:socket=socket(),verbose:bool=False,log:str=None):
+    def __init__(self,port:int,host:str,ipv6:bool,timeout:float,recv_buffer:int,backlog:int,*,sock:socket=socket()):
         """The class of ShepardHTTP server instance.
 
         Arguments:
-            * port: Socket to bind for web-server.
+            * port: Port to bind for web-server.
             * host: Host to bind web-server. It can have '' to bind on local address.
 
             /!\ Arguments below is used to configure preset of default stage of socket instance.
@@ -31,12 +50,15 @@ class ShepardHTTP:
         self.recv_buffer = recv_buffer
         self.backlog = backlog
         self.socket = sock
-        self.events = ShepardHTTPEvents()
+        self.events = ShepardHTTPEvents
     def reset_socket(self):
         """Close and reset the socket instance of web-server to its default state. It"""
         self.socket.close()
         self.socket = socket(AF_INET6 if self.ipv6 else AF_INET,SOCK_STREAM)
         self.socket.settimeout(self.timeout)
+    def event(self,event_func:Callable):
+        if event_func.__name__ in self.events.__dict__:setattr(self.events,event_func.__name__,event_func)
+        else:raise ShepardHTTPExceptions.CoreError(f'"{event_func}" is invalid event.')
     def open(self):
         self.socket.bind((self.host,self.port))
         self.socket.listen(self.backlog)
