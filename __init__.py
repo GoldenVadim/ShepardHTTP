@@ -1,4 +1,5 @@
 from socket import socket,AF_INET6,AF_INET,SOCK_STREAM
+from threading import Thread
 from http import HTTPMethod
 from typing import Callable
 
@@ -14,9 +15,12 @@ class Request:
         finally:
             if e:raise e
     def __parse__(self,content:str):
-        self.headers,self.data=content.split('\r\n\r\n',2)
+        self.headers,self.data=content.split('\r\n\r\n',1)
         self.headers=self.headers.split('\r\n')
-        self.info=self.headers.pop(0)
+        self.method=self.headers.pop(0)
+        self.method=self.method.split(maxsplit=2)
+        self.method,self.path,self.version=HTTPMethod(self.method[0]),self.method[1],self.method[2]
+        self.headers=[tuple(header.split(': ',2))for header in self.headers]
 
 class ShepardHTTPEvents:
     request=None
@@ -64,3 +68,4 @@ class ShepardHTTP:
         self.socket.listen(self.backlog)
     def accept(self):
         sock,addr = self.socket.accept()
+        Thread(target=self.events.request,args=(Request(sock.recv(self.recv_buffer).decode()),(sock,addr)),daemon=False).start()
